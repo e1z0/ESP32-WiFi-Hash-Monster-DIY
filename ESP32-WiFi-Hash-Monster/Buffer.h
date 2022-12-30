@@ -2,9 +2,16 @@
 #define Buffer_h
 
 #include "Arduino.h"
+#ifdef ESP32_DIY
+  #include "SD.h"
+#endif
 #include "FS.h"
 //#include "SD_MMC.h"
 
+#ifdef ESP32_DIY
+#define BUF_BLOCKS 3
+#define EWH_MALLOC malloc
+#else
 #if defined ARDUINO_M5Stack_Core_ESP32
   #define BUF_BLOCKS 4
   #define EWH_MALLOC malloc
@@ -15,6 +22,7 @@
   #else
     #define EWH_MALLOC malloc
   #endif
+#endif
 #endif
 
 #define BUF_SIZE BUF_BLOCKS * 1024

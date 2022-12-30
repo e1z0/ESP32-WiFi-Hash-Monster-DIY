@@ -3510,4 +3510,3 @@ uint16_t* monsterSet[13] =
   (uint16_t*)happy4_64,
   (uint16_t*)love_64
 };
-

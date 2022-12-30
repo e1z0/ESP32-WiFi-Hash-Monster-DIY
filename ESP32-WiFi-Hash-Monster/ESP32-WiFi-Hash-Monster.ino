@@ -1,6 +1,7 @@
 // ESP32-WiFi-Hash-Monster
 // 90% based on PacketMonitor32 from spacehuhn //  https://github.com/spacehuhn/PacketMonitor32/
 // ported to M5stack by 2018.01.11 macsbug  //    https://macsbug.wordpress.com/2018/01/11/packetmonitor32-with-m5stack/
+// ablity to use generic esp32 WROOM32D module with tft touchscreen that is supported by TFT_eSPI library by e1z0 2022.12.29
 // modify to capture eapol/handshake with new GUI with the Purple Monster by G4lile0  6/oct/2019
 // improvements by tobozo 18/nov/2019:
 //   - more compliance with M5 Core functions and TFT_eSprite
@@ -24,6 +25,37 @@
 // SD : GPIO4=CS(CD/D3), 23=MOSI(CMD), 18=CLK, 19=MISO(D0)
 //--------------------------------------------------------------------
 
+#define ESP32_DIY // Do it yourself configuration
+
+#ifdef ESP32_DIY
+  #define SKIP_INTRO // skip intro animation
+  #include <TFT_eSPI.h>
+  // screen resolution
+  #define TFT_WIDTH 480
+  #define TFT_HEIGHT 320
+  // fonts (see list here: https://github.com/Bodmer/TFT_eSPI/blob/master/examples/480%20x%20320/Free_Font_Demo/Free_Fonts.h )
+//  #define FONT1 &FreeMono9pt7b
+//  #define FONT2 &FreeMono12pt7b
+//  #define HEADER_FONT &FreeMonoBold12pt7b
+//  #define FOOTER_FONT &FreeMonoBoldOblique12pt7b
+    #define FONT1 &FreeMono9pt7b
+    #define FONT2 &FreeMono9pt7b
+    #define HEADER_FONT &FreeMono9pt7b
+    #define FOOTER_FONT &FreeMono9pt7b
+  
+  // SD card CS pin definition
+  #define SD_CS 15 
+  TFT_eSPI tft = TFT_eSPI();
+  // for later use, maybe when the touchscreen will be implemented! :)
+  uint16_t portraitCalData[5] = { 315, 3433, 325, 3564, 6 }; // tft.setRotation(0); // Portrait with RPI TFT
+  uint16_t landscapeCalData[5] = { 278, 3584, 279, 3458, 3 }; // tft.setRotation(1); // Landscape with RPI TFT
+#else
+  // fall back to default screen resolution
+  #define TFT_WIDTH 320
+  #define TFT_HEIGHT 240   
+#endif
+
+#ifndef ESP32_DIY
 #include <ESP32-Chimera-Core.h>        // https://github.com/tobozo/ESP32-Chimera-Core/
 #define tft M5.Lcd
 #if !defined USE_M5STACK_UPDATER
@@ -40,7 +72,9 @@
   #define SDU_APP_NAME "WiFi Hash Monster" // title for SD-Updater UI
   #include <M5StackUpdater.h> // https://github.com/tobozo/M5Stack-SD-Updater/
 #endif
+#endif
 
+#ifndef ESP32_DIY
 #if defined ESP_IDF_VERSION_MAJOR && ESP_IDF_VERSION_MAJOR >= 4
   // Use LWIP stack
   #include "esp_wifi.h"
@@ -54,6 +88,20 @@
   #include "esp_event.h"
   #include "esp_event_loop.h"
   #include "nvs_flash.h"
+  #include <stdio.h>
+  #include <string>
+  #include <cstddef>
+  esp_err_t event_handler(void* ctx,system_event_t* event){return ESP_OK;}
+#endif
+#else
+  // Use legacy stack
+  #include <SPI.h>
+  #include "freertos/FreeRTOS.h"
+  #include "esp_wifi.h"
+  #include "esp_wifi_types.h"
+  #include "esp_system.h"
+  #include "esp_event.h"
+  #include "esp_event_loop.h"
   #include <stdio.h>
   #include <string>
   #include <cstddef>
@@ -142,9 +190,13 @@ char   last_ssid_mac[18] = {0};
 char   last_eapol_ssid[33] = { '[', 'n', 'o', 'n', 'e', ']', '\0' };
 char   last_eapol_mac[18] = {0};
 
+
+
 TFT_eSprite header = TFT_eSprite(&tft); // 1bit   color sprite for header
 TFT_eSprite footer = TFT_eSprite(&tft); // 1bit   color sprite for footer
+#ifndef ESP32_DIY
 TFT_eSprite face1  = TFT_eSprite(&tft); // 16bits color sprite for face
+#endif
 TFT_eSprite graph1 = TFT_eSprite(&tft); // 1bit   color sprite for graph1
 TFT_eSprite graph2 = TFT_eSprite(&tft); // 8bits  color sprite for graph2
 TFT_eSprite units1 = TFT_eSprite(&tft); // 1bit   color sprite for units1
@@ -154,15 +206,15 @@ TFT_eSprite units2 = TFT_eSprite(&tft); // 8bits  color sprite for units2
 int headerPosX = 0;
 int headerPosY = 0;
 // dimensions for header sprite
-int headerWidth  = 320-headerPosX;
+int headerWidth  = TFT_WIDTH-headerPosX;
 int headerHeight = 20;
 
 // position for footer sprite
 int footerPosX = 20;
 int footerPosY = 202;
 // dimensions for footer sprite
-int footerWidth  = 320-footerPosX;
-int footerHeight = 240-footerPosY;
+int footerWidth  = TFT_WIDTH-footerPosX;
+int footerHeight = TFT_HEIGHT-footerPosY;
 
 // dimensions for monster sprite
 int face1Width  = 64;
@@ -179,7 +231,7 @@ int units1PosX = 0;
 int units1PosY = 20;
 
 // dimensions for graph1 sprite
-int graph1Width = 320-units1Width;
+int graph1Width = TFT_WIDTH-units1Width;
 int graph1Height = 100;
 // position for graph1 sprite
 int graph1PosX = units1Width;
@@ -189,14 +241,14 @@ int graph1PosY = 28;
 int units2Width  = 36;
 int units2Height = face1Height;
 // position for units2 sprite
-int units2PosX = 320-units2Width;
+int units2PosX = TFT_WIDTH-units2Width;
 int units2PosY = graph1PosY+graph1Height+2;
 
 // position for graph2 sprite
 int graph2PosX = face1Width+face1PosX+5; // right side of monster sprite
 int graph2PosY = graph1PosY+graph1Height+6;
 // dimensions for graph2 sprite
-int graph2Width = 320-(graph2PosX+units2Width); // must fit between monster sprite and unit2 sprite
+int graph2Width = TFT_WIDTH-(graph2PosX+units2Width); // must fit between monster sprite and unit2 sprite
 int graph2Height = face1Height-4;
 
 
@@ -267,8 +319,10 @@ uint32_t ssid_eapol_count= 0;       // eapol frames per second
 
 void setupWiFiPromisc()
 {
+  #ifndef ESP32_DIY
   Serial.println("NVS Flash init");
   nvs_flash_init();
+  #endif
   #if defined ESP_IDF_VERSION_MAJOR && ESP_IDF_VERSION_MAJOR >= 4
     // esp-idf 4.4 uses LWIP
     Serial.println("LWIP init");
@@ -319,8 +373,18 @@ void setup()
     FastLED.clear();
     FastLED.show();
   #endif
+  
+  #ifdef ESP32_DIY
+  Serial.begin(115200);
+  pinMode(SD_CS, OUTPUT);
+  tft.init();
+  tft.setRotation(1); // Landscape
+  tft.setTouch(landscapeCalData);
+  tft.setCursor(0, 0);
+  #else
   M5.begin(); // this will fire Serial.begin()
-
+  #endif
+  
   #ifdef USE_M5STACK_UPDATER
     // New SD Updater support, requires the latest version of https://github.com/tobozo/M5Stack-SD-Updater/
     #if defined M5_SD_UPDATER_VERSION_INT
@@ -333,6 +397,7 @@ void setup()
   bool toggle = false;
   unsigned long lastcheck = millis();
   tft.fillScreen(TFT_BLACK);
+  #ifndef ESP32_DIY
   while( !M5.sd_begin() ) {
     toggle = !toggle;
     tft.setTextColor( toggle ? TFT_BLACK : TFT_WHITE );
@@ -354,18 +419,34 @@ void setup()
       #endif
     }
   }
+  #endif
 
-  SDSetupDone = true;
+  //SDSetupDone = true;
   preferences.begin("packetmonitor32", false);
   ch         = preferences.getUInt("channel",    1);
-  autoChMode = preferences.getUInt("autoChMode", 0);
+  autoChMode = preferences.getUInt("autoChMode", 1);
   preferences.end();
 
+  #ifndef ESP32_DIY
   #ifdef ARDUINO_M5STACK_Core2
     // specific M5Core2 tweaks go here
   #else // M5Classic / M5Fire turn buzzer off
     M5.Speaker.write(0);
   #endif
+  #endif
+
+  setupWiFiPromisc();
+
+  tft.fillScreen(TFT_BLACK);
+  tft.setCursor(0, 0);
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+  tft.setTextSize(0);
+  //tft.setFreeFont(FONT1);
+  tft.setSwapBytes(true);
+  tft.fillRect( 0, 0, TFT_WIDTH, 120, TFT_BLACK );
+
+ // WelComeTaskReady = true;
+
 
   xTaskCreatePinnedToCore( bootAnimationTask, "bootAnimationTask", 8192, NULL, 16, NULL, RUNNING_CORE);
   xTaskCreatePinnedToCore( initSpritesTask,   "initSpritesTask",   8192, NULL, 16, NULL, RUNNING_CORE);
@@ -374,6 +455,8 @@ void setup()
   #ifdef ARDUINO_M5STACK_FIRE
   xTaskCreatePinnedToCore( &blinky,           "blinky",            2500, NULL, 1,  NULL, 1);
   #endif
+
+
 
 }
 
@@ -393,7 +476,11 @@ static void initSpritesTask( void* param )
   if(!header.createSprite( headerWidth, headerHeight ) ) {
     log_e("Can't create header sprite");
   }
+  #ifndef ESP32_DIY
   header.setFont( &fonts::AsciiFont8x16 );
+  #else
+  header.setFreeFont(HEADER_FONT);
+  #endif
   header.setTextSize( 1.0 );
   header.setTextColor( TFT_BLACK, TFT_BLUE ); // unintuitive: use black/blue mask
   header.setTextDatum(TL_DATUM);
@@ -405,7 +492,11 @@ static void initSpritesTask( void* param )
   if(!footer.createSprite( footerWidth, footerHeight ) ) {
     log_e("Can't create footer sprite");
   }
+  #ifndef ESP32_DIY
   footer.setFont( &fonts::AsciiFont8x16 );
+  #else
+  footer.setFreeFont(FOOTER_FONT);
+  #endif
   footer.setTextSize( 1.0 );
   footer.setTextColor( TFT_BLACK, TFT_BLUE ); // unintuitive: use black/blue mask
   footer.setTextDatum(TL_DATUM);
@@ -418,7 +509,11 @@ static void initSpritesTask( void* param )
     log_e("Can't create graph2 sprite");
   }
   graph2.setTextColor(TFT_WHITE,TFT_BLACK);
+  #ifndef ESP32_DIY
   graph2.setFont( &fonts::Font2 );
+  #else
+  graph2.setFreeFont(FONT1);
+  #endif
   graph2.setTextSize( 0.75 );
   graph2.fillSprite(TFT_BLACK);
 
@@ -428,7 +523,11 @@ static void initSpritesTask( void* param )
     log_e("Can't create units2 sprite");
   }
   units2.setTextDatum( TR_DATUM );
+  #ifndef ESP32_DIY
   units2.setFont( &fonts::Font2 );
+  #else
+  units2.setFreeFont(FONT1);
+  #endif
   units2.fillSprite(TFT_BLACK);
 
   // Create a 1bit sprite for the graph1
@@ -436,7 +535,11 @@ static void initSpritesTask( void* param )
   if(!graph1.createSprite( graph1Width, graph1Height ) ) {
     log_e("Can't create graph1 sprite");
   }
+  #ifndef ESP32_DIY
   graph1.setFont(&fonts::Font2);
+  #else
+  graph1.setFreeFont(FONT1);
+  #endif
   //graph1.setTextSize( 0.75 );
   graph1.setBitmapColor( TFT_GREEN, TFT_BLACK );
   graph1.setTextColor( TFT_WHITE, TFT_BLACK );
@@ -448,13 +551,18 @@ static void initSpritesTask( void* param )
   if(!units1.createSprite( units1Width, units1Height ) ) {
     log_e("Can't create units1 sprite");
   }
+  #ifndef ESP32_DIY
   units1.setFont(&fonts::FreeMono9pt7b);
+  #else
+  units1.setFreeFont(FONT1);
+  #endif
   units1.setTextColor( TFT_WHITE, TFT_BLACK );
   units1.setBitmapColor( TFT_WHITE, TFT_BLACK);  // Pkts Scale
   units1.setTextDatum(MR_DATUM);
   units1.setTextSize( 0.75 );
   units1.fillSprite(TFT_BLACK);
 
+  #ifndef ESP32_DIY
   // Create a 16bits sprite for the monster
   face1.setColorDepth(16);
   if(!face1.createSprite( face1Width, face1Height ) ) {
@@ -462,12 +570,11 @@ static void initSpritesTask( void* param )
   }
   face1.fillSprite(TFT_BLACK); // Note: Sprite is filled with black when created
   face1.setSwapBytes(true); // apply endianness since images are stored in 16bits words
+  #endif
   UIReady = true;
   log_w("Leaving initSprites task !");
   vTaskDelete(NULL);
 }
-
-
 
 static void bootAnimationTask( void* param )
 {
@@ -482,17 +589,26 @@ static void bootAnimationTask( void* param )
   float voffset = 176;   // vertical offset
   int imgId = 12;        // image ID
 
+  #ifndef ESP32_DIY
   tft.clear();
+  #else 
+  tft.fillScreen(TFT_BLACK);
+  tft.setCursor(0, 0);
+  #endif
   tft.setTextColor(TFT_WHITE, TFT_BLACK);
   tft.setTextSize(0);
-
+  #ifndef ESP32_DIY
   tft.setFont(&fonts::FreeMono12pt7b);
+  #else
+  tft.setFreeFont(FONT1);
+  #endif
   tft.drawString( "Purple Hash Monster", 6, 24);
   tft.drawString( "by @g4lile0", 26, 44);
   tft.drawString( "90% PacketMonitor32", 6, 74);
   tft.drawString( "by @Spacehuhn", 26, 94);
   tft.setSwapBytes(true);
 
+  #ifndef SKIP_INTRO // save resources
   ypos = voffset - ( abs( cos(vcursor) )*vamplitude );
   tft.pushImage(xpos, ypos, 64, 64, monsterSet[imgId]);
 
@@ -509,17 +625,20 @@ static void bootAnimationTask( void* param )
     vcursor += vstep;
     vTaskDelay(1);
   }
+  #endif
 
-  tft.fillRect( 0, 0, 320, 120, TFT_BLACK );
+  tft.fillRect( 0, 0, TFT_WIDTH, 120, TFT_BLACK );
 
   tft.drawString( "Checking SD...", 6, 74);
 
+  // TODO this should be fixed somehow to consume much less memory on ESP32 Generic device
+  #ifndef ESP32_DIY
   if( !sdBuffer.init() ) { // allocate buffer memory
     // TODO: print error on display
     Serial.println("Error, not enough memory for buffer");
     while(1) vTaskDelay(1);
   }
-
+  
   if ( setupSD() ) {
     sdBuffer.checkFS(&SD);
     sdBuffer.pruneZeroFiles(&SD); // SD cleanup: remove zero-length pcap files from previous scans
@@ -534,6 +653,7 @@ static void bootAnimationTask( void* param )
     // SD setup failed, card not inserted ?
     Serial.println("SD Setup failed");
   }
+  #endif
 
   tft.drawString( "Setting up WiFi...", 6, 44);
 
@@ -612,10 +732,18 @@ void smartSwitchChannel(uint32_t currentTime)
 bool setupSD()
 {
   if( SDSetupDone ) return true;
+  #ifndef ESP32_DIY
   M5.sd_end();
+  //#else
+  //pinMode(SD_CS, OUTPUT);
+  #endif
   int attempts = 20;
   do {
+    #ifdef ESP32_DIY
+    SDSetupDone = SD.begin(SD_CS);
+    #else
     SDSetupDone = M5.sd_begin(); // SD.begin( TFCARD_CS_PIN );
+    #endif
   } while( --attempts > 0 && ! SDSetupDone );
 
   if (!SDSetupDone ) {
@@ -992,6 +1120,7 @@ void draw()
 
   byte aleatorio; // = random (1,10);
 
+  #ifndef ESP32_DIY
   if ((deauths>0) && (eapol==0)) {
     face1.pushImage(0, 0, face1Width, face1Height, angry_64);
   }
@@ -1028,8 +1157,10 @@ void draw()
   if (eapol>0)   {
     face1.pushImage(0, 0, face1Width, face1Height, love_64);
   }
+  
 
   face1.pushSprite( face1PosX, face1PosY, TFT_BLACK);
+  #endif
 
   draw_RSSI();
 }
@@ -1105,21 +1236,37 @@ void draw_RSSI()
 void coreTask( void * p )
 {
   while( !UIReady ) vTaskDelay(1); // wait for sprites to init
+  #ifndef ESP32_DIY
   while( !WelComeTaskReady ) vTaskDelay(1); // wait for animation to terminate
+//  #else
+//  if (!WelComeTaskReady) {
+//    setupWiFiPromisc();
+//    WelComeTaskReady = true;
+//    vTaskDelay(3);
+//  }
+  #endif
 
   uint32_t currentTime;
   setChannel(ch);
   Serial.printf("[C]urrent channel: %d\n", ch);
   tmpPacketCounter = 0; // reset to avoid overflow on first render
-
+  #ifndef ESP32_DIY
   tft.clear();
+  #else
+  tft.fillScreen(TFT_BLACK);
+  tft.setCursor(0, 0);
+  #endif
   // draw icons
   tft.fillRect( 0, footerPosY, 32, 40, TFT_BLUE );
+  #ifndef ESP32_DIY
   tft.pushImage( 2, footerPosY+2,  16, 16, (uint16_t*)rssi_16x16_rgb565,  TFT_BLACK );
   tft.pushImage( 2, footerPosY+20, 16, 16, (uint16_t*)eapol_16x16_rgb565, TFT_BLACK );
+  #endif
 
   lastButtonTime = millis();
+  #ifndef ESP32_DIY
   M5.update();
+  #endif
 
   while (true) {
     bool needDraw = false;
@@ -1140,7 +1287,9 @@ void coreTask( void * p )
     }
 
     if ( currentTime - lastButtonTime > BUTTON_DEBOUNCE ) {
+      #ifndef ESP32_DIY
       M5.update();
+   
       // buttons assignment :
       //  - Incognito mode => BtnA short press (toggles display)
       //  - SD Activation  => BtnA long press (enable/disable SD)
@@ -1177,6 +1326,7 @@ void coreTask( void * p )
         needDraw = true;
       }
 
+     
       if( M5.BtnB.wasReleased() ) {
         bright+=50;
         if (bright>251) bright=0;
@@ -1198,6 +1348,7 @@ void coreTask( void * p )
         preferences.putUInt("autoChMode", autoChMode);
         preferences.end();
       }
+      #endif
 
       lastButtonTime = currentTime;
       if (needDraw) draw();

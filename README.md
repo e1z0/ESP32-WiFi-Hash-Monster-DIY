@@ -1,3 +1,20 @@
+# This fork info
+
+<img src="https://raw.githubusercontent.com/e1z0/ESP32-WiFi-Hash-Monster-DIY/master/images/diy_device.jpeg" width="400"/>
+
+Adds generic compatibility to ESP32 (espacially for WROOM based microcontrollers), i've also done support for IL9486 raspberry PI tft LCD screen. You can find 
+how to build device like mine [via this link](https://github.com/e1z0/ESP32Marauder-DIY/blob/master/guide/guide.md).
+
+TODO:
+
+What does not work:
+* For now the SD Card module support is broken and needs to be fixed, it actually works but consumes to much ram and wifi won't start after enabling it (look 
+at 634 line of .ino project).
+* Boot animation intro is also disabled for now as it consumes much ram too.
+* Needs some adjustment on the fonts for nicer look.
+* Better integrate the TFT_eSPI library into the project.
+
+
 # ESP32 WiFi Hash Monster
 
 <p align="center">
